@@ -1,0 +1,23 @@
+# Usage: DATA_ROOT=/path/to/densea_aggregated RUNS_DIR=/path/to/runs docker compose up -d --build
+services:
+  diffusiondet:
+    build: .
+    image: densea-diffusiondet:1.0
+    container_name: densea_diffusiondet
+    shm_size: 32gb
+    ipc: host
+    volumes:
+      - ${DATA_ROOT:?set DATA_ROOT}:/data:ro
+      - ${RUNS_DIR:?set RUNS_DIR}:/runs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DENSEA_DATA_ROOT=/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    stdin_open: true
+    tty: true

@@ -1,191 +1,143 @@
-# DiffusionDet for Marine Debris Detection
+# DenSea DiffusionDet
 
-![CUDA](https://img.shields.io/badge/CUDA-12.1.0-orange)
-![CUDNN](https://img.shields.io/badge/CUDNN-8.7.0-orange)
-![Python](https://img.shields.io/badge/Python-3.10-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
+Training and evaluation code for **DiffusionDet** on **DenSea-Aggregated**, the benchmark used in the article
+*When Does Synthetic Data Help Underwater Debris Detection? Gap Metrics, Data Regimes and Detector Paradigms*.
+It is a derivative of [ShoufaChen/DiffusionDet](https://github.com/ShoufaChen/DiffusionDet) built on
+[detectron2](https://github.com/facebookresearch/detectron2), and sits next to the other two detectors of the study,
+[`densea-rtdetrv2`](https://github.com/asferrer/densea-rtdetrv2) and
+[`densea-rfdetr`](https://github.com/asferrer/densea-rfdetr). The group-aware partition, the synthetic batches, the
+experiment definitions and the bootstrap evaluation are in
+[`densea-benchmark`](https://github.com/asferrer/densea-benchmark); this repository is the detector it calls.
 
-## Table of Contents
+> **License.** DiffusionDet is released by its authors under **CC BY-NC 4.0** (non-commercial use). This derivative
+> keeps that license, and so do the DenSea-specific files; see [License](#license).
 
-- [Project Overview](#project-overview)
-- [Features](#features)
-- [Marine Debris Detection Goals](#marine-debris-detection-goals)
-- [Installation](#installation)
-  - [Using DevContainer](#using-devcontainer)
-  - [Using Conda & Pip](#using-conda--pip)
-- [Models](#models)
-- [Training Commands](#training-commands)
-- [Testing Commands](#testing-commands)
-- [Docker Setup](#docker-setup)
-  - [Dockerfile](#dockerfile)
-  - [docker-compose.yml](#docker-composeyml)
-- [Contributing](#contributing)
-- [License](#license)
-- [Citing](#citing)
-- [Contact](#contact)
+## What changes with respect to upstream
 
-## Project Overview
+Based on upstream commit [`18b528f`](https://github.com/ShoufaChen/DiffusionDet/commit/18b528f8f84ee6fbf872859fbacf77208413ec81)
+(2022-11-19, the head of upstream `main`). The first commit of this repository is that snapshot, so `git diff HEAD~1`
+shows exactly what was changed. The details are in [`CHANGES.md`](CHANGES.md); in short:
 
-Project DenSea leverages **DiffusionDet**, a cutting-edge object detection model, for identifying and tracking **marine debris** in underwater environments. It utilizes diffusion-based methods for enhanced accuracy and is specifically tailored to address the challenges of detecting objects in diverse underwater conditions, such as varying light levels, water turbidity, and debris occlusion.
-
-The implementation is based on **DiffusionDet v0.1** and the latest version of **Detectron2**, ensuring compatibility with modern datasets and hardware configurations.
-
-## Features
-
-- **Marine Debris Detection:** Detects objects like plastics, metals, tires, and other waste commonly found on the seabed.
-- **Advanced Diffusion Techniques:** Employs diffusion-based methods to improve detection accuracy in complex environments.
-- **Dataset Compatibility:** Supports COCO and LVIS datasets for training and testing.
-- **Dockerized Development:** Includes a DevContainer setup for seamless environment configuration.
-- **Visualization Tools:** Integrated with TensorBoard for monitoring training performance and metrics.
-- **Streamlit Interface:** Offers an interactive web interface for real-time predictions and dataset exploration.
-
-## Marine Debris Detection Goals
-
-The primary goal of this application is to assist researchers and environmental organizations in:
-
-- **Monitoring marine pollution:** Identifying types and quantities of debris across different underwater regions.
-- **Developing cleanup strategies:** Using detected patterns to plan effective removal of underwater waste.
-- **Raising awareness:** Visualizing marine debris data to educate stakeholders and promote ocean conservation.
+- **Training script** `train_net_densea.py` (from `train_net.py`): registration of the DenSea-Aggregated splits from
+  the annotation files; AMP (bf16 or fp16) and gradient accumulation; model selection and early stopping on the
+  validation AP of the EMA weights (`DENSEA.*` options); resume that restores the best value and the patience from
+  the evaluation history; periodic checkpoints that keep only every N-th plus the last one; the training mapper
+  rescales according to `INPUT.MIN_SIZE_TRAIN`; the learning-rate scheduler and EMA hooks are no longer registered
+  twice.
+- **Data augmentation** (`diffusiondet/dataset_mapper.py`): albumentations pipeline for underwater images.
+- **Numerics**: box decoding and IoU/GIoU computed in fp32 with an epsilon, no assertion on degenerate boxes.
+- **Optional speed-ups** (off by default, `DENSEA_FAST_OPT`, `DENSEA_FAST_LOSS`, `DENSEA_FAST_EMA`,
+  `DENSEA_NO_SCALER`): parameter groups with foreach gradient clipping, a loss and matcher without CPU/GPU
+  synchronisations, a foreach EMA update, and no GradScaler with bf16. They are covered by CPU tests that require
+  identical results to the reference path. The launcher turns `DENSEA_FAST_OPT` on.
+- **Configs** (`configs/diffdet.densea.*.yaml`) for the 8-class benchmark; tests; `tools/launch_train.py`;
+  Dockerfile with detectron2 pinned.
+- Removed: the COCO and LVIS configs, the visualization demo and the upstream getting-started notes.
 
 ## Installation
 
-### Using DevContainer
+detectron2 is a dependency, not part of this repository. It is installed from the commit used for the results:
 
-1. Clone the repository and navigate to the project directory.
-  ```bash
-  git clone https://github.com/asferrer/DenSea.git
-  cd DenSea
-  ```
-2. Ensure Docker and Docker Compose are installed on your system.
-3. Build and run the DevContainer using the provided `docker-compose.yml` file. This will set up all necessary dependencies and libraries in a consistent environment.
 ```bash
-  docker-compose up -d
-  ```
-4. Once the container is running, access the Streamlit interface at `http://localhost:8501`.
-
-### Using Conda & Pip
-
-1. Clone the repository and navigate to the project directory.
-```bash
-  git clone https://github.com/asferrer/DenSea.git
-  cd DenSea
-  ```
-2. Create a virtual environment using Conda with Python 3.10.
-```bash
-conda create -n DenSea python=3.10
-conda activate DenSea
-```
-3. Install the `detectron2` and `diffusiondet` packages for object detection functionality.
-```bash
-pip install --upgrade pip
-pip install 'git+https://github.com/facebookresearch/detectron2.git'
-pip install timm
+pip install -r requirements.txt
+pip install --no-build-isolation \
+    "git+https://github.com/facebookresearch/detectron2.git@8a9d885b3d4dcf1bef015f0593b872ed8d32b4ab"
 ```
 
-## Models
+With Docker (NVIDIA Container Toolkit and a GPU with 24 GB or more; the study used an RTX 5090), which does both steps:
 
-Below is a summary of the supported models, their performance metrics, and links to download the pre-trained weights:
-
-| Method          | Box AP (1 step) | Box AP (4 step) | Download Link                                                                 |
-|------------------|-----------------|-----------------|-------------------------------------------------------------------------------|
-| COCO-Res50       | 45.5           | 46.1           | [model](https://github.com/ShoufaChen/DiffusionDet/releases/download/v0.1/diffdet_coco_res50.pth) |
-| COCO-Res101      | 46.6           | 46.9           | [model](https://github.com/ShoufaChen/DiffusionDet/releases/download/v0.1/diffdet_coco_res101.pth) |
-| COCO-SwinBase    | 52.3           | 52.7           | [model](https://github.com/ShoufaChen/DiffusionDet/releases/download/v0.1/diffdet_coco_swinbase.pth) |
-| LVIS-Res50       | 30.4           | 31.8           | [model](https://github.com/ShoufaChen/DiffusionDet/releases/download/v0.1/diffdet_lvis_res50.pth) |
-| LVIS-Res101      | 31.9           | 32.9           | [model](https://github.com/ShoufaChen/DiffusionDet/releases/download/v0.1/diffdet_lvis_res101.pth) |
-| LVIS-SwinBase    | 40.6           | 41.9           | [model](https://github.com/ShoufaChen/DiffusionDet/releases/download/v0.1/diffdet_lvis_swinbase.pth) |
-
-## Training Commands
-
-To train the model for marine debris detection, use the appropriate configuration file for your dataset. Specify the number of GPUs and the configuration YAML file for training.
 ```bash
-python train_net_cleansea.py --num-gpus 1 --config-file configs/diffdet.coco.res50.300boxes_cleansea.yaml
+DATA_ROOT=/path/to/densea_aggregated RUNS_DIR=/path/to/runs docker compose up -d --build
+docker exec -it densea_diffusiondet bash
 ```
 
-## Testing Commands
+Python 3.11 and PyTorch 2.7.0 with CUDA 12.8 were used; `requirements.txt` lists the pinned versions.
 
-The application supports testing on:
+## Data
 
-- **Images:** Specify the path to an input image for detection.
+Download **DenSea-Aggregated** (*DenSea-Aggregated: A Group-Aware Benchmark for Underwater Debris Detection*) from the [dataset page of the University of Alicante group](https://www.dlsi.ua.es/~jgallego/datasets/) and unpack it. It contains
+`annotations/{train,val,test}.json` (COCO, 8 classes, with a `group` per image) and the `images/` folder, and
+`file_name` entries are relative to the package root. The partition is by groups of near-duplicate images, so no
+group appears in two splits (995 / 204 / 217 groups; 10,245 / 2,185 / 2,207 images). The three annotation files and
+the image root are given to the launcher; the synthetic batches and the training set of each experiment come from
+`densea-benchmark`, which writes annotation files in the same format.
+
+## Training and evaluation
+
 ```bash
-python demo.py --config-file configs/diffdet.coco.res50.300boxes.yaml --input IMG-20230329-WA0022.jpg --opts MODEL.WEIGHTS models/diffdet_coco_res50_300boxes.pth
-```
-- **Videos:** Specify the path to a video file for detection over frames.
-```bash
-python demo.py --config-file configs/diffdet.coco.res50.300boxes.yaml --video-input C:\Cleansea\cleansea_dataset\Videos\video_analisis\debrisVideo2.mp4 --opts MODEL.WEIGHTS models/diffdet_coco_res50_300boxes.pth
-```
-- **Live Webcam Feed:** Use your webcam to detect debris in real-time.
-```bash
-python demo.py --config-file configs/diffdet.coco.res50.300boxes.yaml --webcam --confidence-threshold 0.8 --opts MODEL.WEIGHTS models/diffdet_coco_res50_300boxes.pth
+R=/data/densea_aggregated
+python tools/launch_train.py \
+    --train-json $R/annotations/train.json --val-json $R/annotations/val.json \
+    --test-json $R/annotations/test.json --image-root $R --output-dir runs/real_only --seed 21
 ```
 
-For each testing scenario, ensure the path to the trained model weights is provided.
+The protocol is the same as for the other two detectors: up to 200 epochs (DiffusionDet trains by iterations, so
+`MAX_ITER = 200 x ceil(N / 8)`), batch size 8, AdamW with a learning rate of 5e-5 (5e-6 in the backbone), weight
+decay 0.05, cosine schedule with 2,000 warm-up iterations, EMA 0.9998, bf16, ResNet-50 initialised from ImageNet,
+300 proposals, one sampling step, evaluation on the validation split once per epoch, `model_best.pth` = best
+AP@[.5:.95] of the EMA weights, early stopping after 20 evaluations without an improvement of 0.001. The test split is
+evaluated once at the end with `model_best.pth`; the detections are written to
+`runs/real_only/eval_test/inference/densea_test/coco_instances_results.json` (at most 100 per image). Group-bootstrap
+confidence intervals and the comparison between strategies come from the evaluation scripts of `densea-benchmark`.
+Training resumes from the last checkpoint if `--output-dir` already has one. The configuration is
+`configs/diffdet.densea.res50.yaml`; ResNet-101 and Swin variants (`configs/diffdet.densea.res101.yaml`,
+`swintiny`, `swinsmall`, `swinbase`) use the same settings, but are not part of the reported results (Swin needs the
+ImageNet checkpoint converted to the detectron2 format under `models/`).
 
-## Docker Setup
+CPU tests: `CUDA_VISIBLE_DEVICES= python -m pytest -q tests`.
 
-### Dockerfile
+Dataset locations can also be set with the environment variables `DENSEA_DATA_ROOT`, `DENSEA_TRAIN_JSON`,
+`DENSEA_VALID_JSON`, `DENSEA_TEST_JSON` and `DENSEA_IMAGE_ROOT` when `train_net_densea.py` is called directly.
 
-The Dockerfile is based on `nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04` and sets up the required environment, including Python dependencies and GPU support.
+## Expected results
 
-### docker-compose.yml
+AP@[.5:.95] (x100) of DiffusionDet (ResNet-50), mean of three training seeds (21, 22, 23) with 95 % confidence
+intervals from a bootstrap over groups (2,000 resamples). The three arms are: Real-Only, Minority-Focus (clean backgrounds; synthetic objects of the rare classes) and Standard (copy-paste; all synthetic images added).
 
-The `docker-compose.yml` file configures the DevContainer for the project. It includes:
+| Arm | Validation AP | AP50 | AP75 | Test AP | AP50 | AP75 |
+|---|---|---|---|---|---|---|
+| Real-Only | 33.30 [30.11; 37.81] | 55.56 | 34.98 | 34.11 [31.83; 38.08] | 57.26 | 36.31 |
+| Minority-Focus (clean backgrounds) | 35.15 [31.56; 39.86] | 58.24 | 37.58 | 36.05 [33.09; 40.49] | 60.50 | 38.41 |
+| Standard (copy-paste) | 35.29 [31.38; 40.15] | 55.49 | 38.24 | 35.41 [32.92; 39.21] | 56.15 | 38.50 |
 
-- Volume mounting for the source code.
-- Port mappings for TensorBoard and Streamlit.
-- Resource limits to optimize memory and CPU usage.
-- Shared memory size increase to support large datasets.
+The standard deviation between seeds is 0.24 to 0.73 AP. Differences with respect to Real-Only on test:
+Minority-Focus +1.93 AP (95 % CI [+0.09; +3.58]) and Standard (copy-paste) +1.29 AP (95 % CI [-0.37; +2.31]). The
+numbers above are the reference for a reproduction on the same partition; small differences between seeds are
+expected.
 
-## Contributing
+## Citation
 
-We welcome contributions to improve the project. Follow these steps to contribute:
+If you use this code, please cite the article, the dataset and DiffusionDet:
 
-1. Fork the repository.
-2. Clone your fork and create a new branch for your feature or bug fix.
-3. Make your changes and commit them with clear, concise messages.
-4. Push your branch to your fork and open a pull request.
+```bibtex
+@article{sanchezferrer2026synthetic,
+  title   = {When Does Synthetic Data Help Underwater Debris Detection? Gap Metrics, Data Regimes and Detector Paradigms},
+  author  = {S{\'a}nchez-Ferrer, Alejandro and Gallego, Antonio Javier and Calvo-Zaragoza, Jorge},
+  journal = {Neurocomputing},
+  year    = {2026},
+  note    = {Manuscript in preparation}
+}
+
+@dataset{sanchezferrer2026densea,
+  title     = {{DenSea-Aggregated}: A Group-Aware Benchmark for Underwater Debris Detection},
+  author    = {S{\'a}nchez-Ferrer, Alejandro and Gallego, Antonio Javier and Calvo-Zaragoza, Jorge},
+  year      = {2026},
+  publisher = {University of Alicante},
+  url       = {https://www.dlsi.ua.es/~jgallego/datasets/}
+}
+
+@inproceedings{chen2023diffusiondet,
+  title     = {{DiffusionDet}: Diffusion Model for Object Detection},
+  author    = {Chen, Shoufa and Sun, Peize and Song, Yibing and Luo, Ping},
+  booktitle = {ICCV},
+  year      = {2023}
+}
+```
 
 ## License
 
-This project is licensed under the MIT License.
-
-## Citing
-
-If you use DiffusionDet in your research or wish to refer to the results published here, please use the following BibTeX entries.
-
-```BibTeX
-@article{SANCHEZFERRER2023154,
-      title = {An experimental study on marine debris location and recognition using object detection},
-      author = {Alejandro Sánchez-Ferrer and Jose J. Valero-Mas and Antonio Javier Gallego and Jorge Calvo-Zaragoza},
-      journal = {Pattern Recognition Letters},
-      year = {2023},
-      doi = {https://doi.org/10.1016/j.patrec.2022.12.019},
-      url = {https://www.sciencedirect.com/science/article/pii/S0167865522003889},
-}
-```
-```BibTeX
-@InProceedings{10.1007/978-3-031-04881-4_49,
-      title="The CleanSea Set: A Benchmark Corpus for Underwater Debris Detection and Recognition",
-      author="S{\'a}nchez-Ferrer, Alejandro and Gallego, Antonio Javier and Valero-Mas, Jose J. and Calvo-Zaragoza, Jorge",
-      booktitle="Pattern Recognition and Image Analysis",
-      year="2022",
-      publisher="Springer International Publishing",
-}
-
-```
-```BibTeX
-@article{chen2022diffusiondet,
-      title={DiffusionDet: Diffusion Model for Object Detection},
-      author={Chen, Shoufa and Sun, Peize and Song, Yibing and Luo, Ping},
-      journal={arXiv preprint arXiv:2211.09788},
-      year={2022}
-}
-```
-
-## Contact
-
-For inquiries or support, contact:
-
-**Alejandro Sanchez Ferrer**  
-Email: asanc.tech@gmail.com  
-GitHub: [asferrer](https://github.com/asferrer)
+The code of DiffusionDet, and therefore this derivative, is licensed under the **Creative Commons
+Attribution-NonCommercial 4.0 International** license (see [`LICENSE`](LICENSE)): it may be used and adapted for
+non-commercial purposes only, with attribution. The files written for DenSea (configs, launcher, tools, tests, Docker files) are offered under the same license for consistency; upstream's license is not changed. [`NOTICE`](NOTICE) lists the origin of the code it builds on
+(Sparse R-CNN and detectron2, Apache-2.0; DETR, Apache-2.0; Swin Transformer, MIT). detectron2 is installed
+separately and keeps its own Apache-2.0 license.

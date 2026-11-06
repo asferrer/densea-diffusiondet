@@ -1,0 +1,7 @@
+# ResNet-101 backbone with the common DenSea configuration. Not part of the results reported in the article.
+_BASE_: "diffdet.densea.res50.yaml"
+MODEL:
+  WEIGHTS: "detectron2://ImageNetPretrained/torchvision/R-101.pkl"
+  RESNETS:
+    DEPTH: 101
+OUTPUT_DIR: "output/densea_res101"

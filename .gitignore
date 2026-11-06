@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+_ext/
+*.so
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# training outputs, weights and data are never versioned
+runs/
+output/
+logs/
+models/
+datasets/
+*.pth
+*.pkl
+*.onnx
+*.log
+.env

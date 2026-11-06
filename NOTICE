@@ -1,0 +1,21 @@
+DenSea DiffusionDet
+Copyright 2026 Alejandro Sanchez Ferrer
+
+This repository is a derivative work of DiffusionDet (https://github.com/ShoufaChen/DiffusionDet),
+Copyright (c) Shoufa Chen, Peize Sun, Yibing Song and Ping Luo, licensed under the Creative Commons
+Attribution-NonCommercial 4.0 International license (see LICENSE). The starting point is upstream
+commit 18b528f8f84ee6fbf872859fbacf77208413ec81 (2022-11-19). Files modified from upstream are
+listed in CHANGES.md; the headers of the files keep the "Modified by" notices of upstream.
+
+Upstream DiffusionDet in turn builds on:
+  - Sparse R-CNN (Peize Sun, Rufeng Zhang et al.), Apache License 2.0
+  - detectron2, Copyright (c) Facebook, Inc. and its affiliates, Apache License 2.0
+  - DETR, Copyright (c) Facebook, Inc. and its affiliates, Apache License 2.0
+  - Swin Transformer, Copyright (c) Microsoft Corporation, MIT License
+
+detectron2 is not redistributed here. It is installed from
+https://github.com/facebookresearch/detectron2 at commit 8a9d885b3d4dcf1bef015f0593b872ed8d32b4ab
+and keeps its own license.
+
+The files added for DenSea (configs, launcher, tools, tests, Docker files, documentation) are offered under
+the same license as upstream, CC BY-NC 4.0, for consistency. Upstream's license is not changed.

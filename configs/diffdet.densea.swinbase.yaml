@@ -1,0 +1,13 @@
+# Swin-base backbone with the common DenSea configuration. Not part of the results reported in the article.
+# The weights are the ImageNet-pretrained Swin Transformer checkpoint converted to the detectron2 format.
+_BASE_: "diffdet.densea.res50.yaml"
+MODEL:
+  WEIGHTS: "models/swin_base_patch4_window7_224.pkl"
+  BACKBONE:
+    NAME: build_swintransformer_fpn_backbone
+    FREEZE_AT: 0
+  SWIN:
+    SIZE: B
+  FPN:
+    IN_FEATURES: ["swin0", "swin1", "swin2", "swin3"]
+OUTPUT_DIR: "output/densea_swinbase"

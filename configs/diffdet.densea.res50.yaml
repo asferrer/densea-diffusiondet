@@ -1,0 +1,74 @@
+# DiffusionDet with a ResNet-50 FPN backbone on DenSea-Aggregated (8 classes): common configuration of all
+# training strategies in the study. train_net_densea.py sets, per experiment, SOLVER.MAX_ITER
+# (= 200 epochs), TEST.EVAL_PERIOD (= 1 epoch) and SOLVER.CHECKPOINT_PERIOD from the number of training
+# images (see tools/launch_train.py). Common early stopping for the three detectors: validation
+# AP@[.5:.95], patience of 20 epochs, minimum improvement of 0.001.
+_BASE_: "Base-DiffusionDet.yaml"
+MODEL:
+  WEIGHTS: "detectron2://ImageNetPretrained/torchvision/R-50.pkl"
+  BACKBONE:
+    NAME: "build_resnet_fpn_backbone"
+    FREEZE_AT: 2
+  RESNETS:
+    DEPTH: 50
+    STRIDE_IN_1X1: False
+  ROI_HEADS:
+    NUM_CLASSES: 8
+  DiffusionDet:
+    NUM_PROPOSALS: 300
+    NUM_CLASSES: 8
+    ALPHA: 0.25               # focal loss, DiffusionDet defaults
+    GAMMA: 2.0
+    SAMPLE_STEP: 1            # same number of sampling steps for validation (selection) and test
+  MASK_ON: False
+MODEL_EMA:
+  ENABLED: True
+  DECAY: 0.9998
+  DEVICE: "cuda"
+DATASETS:
+  TRAIN: ("densea_train",)
+  TEST: ("densea_valid",)     # periodic evaluation and model selection use the validation split only
+DATALOADER:
+  NUM_WORKERS: 8
+  FILTER_EMPTY_ANNOTATIONS: True
+  ASPECT_RATIO_GROUPING: True
+  SAMPLER_TRAIN: "TrainingSampler"   # repeat-factor sampling disabled
+  REPEAT_THRESHOLD: 0.0
+INPUT:
+  FORMAT: "RGB"
+  MIN_SIZE_TRAIN: (640, 672, 704, 736, 768, 800)
+  MAX_SIZE_TRAIN: 960
+  MIN_SIZE_TEST: 800
+  MAX_SIZE_TEST: 960
+  RANDOM_FLIP: "horizontal"
+SOLVER:
+  OPTIMIZER: "ADAMW"
+  BASE_LR: 0.00005            # same as the heads of RT-DETRv2 and RF-DETR
+  BACKBONE_MULTIPLIER: 0.1    # backbone 5e-6
+  WEIGHT_DECAY: 0.05
+  IMS_PER_BATCH: 8
+  GRAD_ACCUM_STEPS: 1
+  MAX_ITER: 125000            # overridden by tools/launch_train.py
+  LR_SCHEDULER_NAME: "WarmupCosineLR"
+  WARMUP_FACTOR: 0.0001
+  WARMUP_ITERS: 2000
+  WARMUP_METHOD: "linear"
+  CHECKPOINT_PERIOD: 5000     # overridden by tools/launch_train.py
+  CLIP_GRADIENTS:
+    ENABLED: True
+    CLIP_TYPE: "norm"
+    CLIP_VALUE: 1.0
+    NORM_TYPE: 2.0
+  AMP:
+    ENABLED: True
+    PRECISION: "bf16"
+    INIT_SCALE: 65536
+TEST:
+  DETECTIONS_PER_IMAGE: 100   # COCO maxDets used in the common evaluation
+  EVAL_PERIOD: 2500           # overridden by tools/launch_train.py (once per epoch)
+DENSEA:
+  BEST_METRIC: "bbox/AP"      # model_best.pth = best AP@[.5:.95] of the EMA weights on validation
+  EARLY_STOP_PATIENCE: 20     # evaluations without improvement (one per epoch = 20 epochs)
+  EARLY_STOP_MIN_DELTA: 0.1   # AP points (= 0.001 on a 0-1 scale, as in the other detectors)
+OUTPUT_DIR: "output/densea_res50"
+SEED: 21

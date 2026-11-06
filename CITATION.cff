@@ -1,0 +1,55 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the article below, the dataset and the DiffusionDet paper."
+title: "DenSea DiffusionDet: training and evaluation of DiffusionDet on DenSea-Aggregated"
+type: software
+authors:
+  - family-names: "Sánchez Ferrer"
+    given-names: "Alejandro"
+license: CC-BY-NC-4.0
+repository-code: "https://github.com/asferrer/densea-diffusiondet"
+keywords:
+  - object detection
+  - marine debris
+  - synthetic data
+  - DiffusionDet
+preferred-citation:
+  type: article
+  title: "When Does Synthetic Data Help Underwater Debris Detection? Gap Metrics, Data Regimes and Detector Paradigms"
+  authors:
+    - family-names: "Sánchez-Ferrer"
+      given-names: "Alejandro"
+    - family-names: "Gallego"
+      given-names: "Antonio Javier"
+    - family-names: "Calvo-Zaragoza"
+      given-names: "Jorge"
+  journal: "Neurocomputing"
+  year: 2026
+  notes: "Manuscript in preparation"
+references:
+  - type: dataset
+    title: "DenSea-Aggregated: A Group-Aware Benchmark for Underwater Debris Detection"
+    authors:
+      - family-names: "Sánchez-Ferrer"
+        given-names: "Alejandro"
+      - family-names: "Gallego"
+        given-names: "Antonio Javier"
+      - family-names: "Calvo-Zaragoza"
+        given-names: "Jorge"
+    year: 2026
+    publisher:
+      name: "University of Alicante"
+    url: "https://www.dlsi.ua.es/~jgallego/datasets/"
+  - type: conference-paper
+    title: "DiffusionDet: Diffusion Model for Object Detection"
+    authors:
+      - family-names: "Chen"
+        given-names: "Shoufa"
+      - family-names: "Sun"
+        given-names: "Peize"
+      - family-names: "Song"
+        given-names: "Yibing"
+      - family-names: "Luo"
+        given-names: "Ping"
+    collection-title: "ICCV"
+    year: 2023
+    url: "https://arxiv.org/abs/2211.09788"
