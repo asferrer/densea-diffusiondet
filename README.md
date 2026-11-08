@@ -34,6 +34,20 @@ shows exactly what was changed. The details are in [`CHANGES.md`](CHANGES.md); i
   Dockerfile with detectron2 pinned.
 - Removed: the COCO and LVIS configs, the visualization demo and the upstream getting-started notes.
 
+## Workflow
+
+The experiments are defined and evaluated in `densea-benchmark`; this repository trains one detector and writes its detections:
+
+```mermaid
+flowchart LR
+    BM["densea-benchmark<br/>training set of the experiment<br/>(COCO files)"] --> LT["tools/launch_train.py"]
+    LT --> TR["train_net_densea.py<br/>detectron2, bf16, EMA,<br/>early stopping, selection on VAL"]
+    TR --> BEST["model_best.pth"]
+    BEST --> EV["evaluation on TEST, once"]
+    EV --> PRED["eval_test/inference/densea_test/<br/>coco_instances_results.json"]
+    PRED --> BOOT["densea-benchmark<br/>group bootstrap"]
+```
+
 ## Installation
 
 detectron2 is a dependency, not part of this repository. It is installed from the commit used for the results:
